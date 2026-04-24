@@ -205,6 +205,239 @@ function leSafeJson($value): string
     return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 }
 
+function leNumberToInt(string $value): int
+{
+    $value = trim($value);
+    return ($value !== '' && ctype_digit($value)) ? (int) $value : 0;
+}
+
+function leConsecutiveCount(array $numbers): int
+{
+    $sorted = [];
+    foreach ($numbers as $v) {
+        $n = is_int($v) ? $v : leNumberToInt((string) $v);
+        if ($n > 0) {
+            $sorted[] = $n;
+        }
+    }
+    sort($sorted, SORT_NUMERIC);
+    $count = 0;
+    for ($i = 1; $i < count($sorted); $i++) {
+        if ($sorted[$i] - $sorted[$i - 1] === 1) {
+            $count++;
+        }
+    }
+    return $count;
+}
+
+function leArithmeticPatternScore(array $numbers): int
+{
+    $sorted = [];
+    foreach ($numbers as $v) {
+        $n = is_int($v) ? $v : leNumberToInt((string) $v);
+        if ($n > 0) {
+            $sorted[] = $n;
+        }
+    }
+    sort($sorted, SORT_NUMERIC);
+    if (count($sorted) < 4) {
+        return 0;
+    }
+    $same = 0;
+    for ($i = 2; $i < count($sorted); $i++) {
+        if (($sorted[$i - 1] - $sorted[$i - 2]) === ($sorted[$i] - $sorted[$i - 1])) {
+            $same++;
+        }
+    }
+    return $same;
+}
+
+function leNormalizePlayForGame(array $numbers, int $min, int $max, int $limit): array
+{
+    $ints = [];
+    $seen = [];
+    foreach ($numbers as $v) {
+        $n = is_int($v) ? $v : leNumberToInt((string) $v);
+        if ($n < $min || $n > $max || isset($seen[$n])) {
+            continue;
+        }
+        $seen[$n] = true;
+        $ints[] = $n;
+        if (count($ints) >= $limit) {
+            break;
+        }
+    }
+    sort($ints, SORT_NUMERIC);
+    $out = [];
+    foreach ($ints as $n) {
+        $out[] = ($n < 10) ? '0' . $n : (string) $n;
+    }
+    return $out;
+}
+
+function leBuildPlayFromPoolsForGame(array $pools, array $fallback, int $min, int $max, int $limit): array
+{
+    $picked = [];
+    $seen   = [];
+    foreach ($pools as $pool) {
+        foreach ($pool as $v) {
+            $n = is_int($v) ? $v : leNumberToInt((string) $v);
+            if ($n < $min || $n > $max || isset($seen[$n])) {
+                continue;
+            }
+            $seen[$n] = true;
+            $picked[]  = $n;
+            if (count($picked) >= $limit) {
+                break 2;
+            }
+        }
+    }
+    if (count($picked) < $limit) {
+        foreach ($fallback as $v) {
+            $n = is_int($v) ? $v : leNumberToInt((string) $v);
+            if ($n < $min || $n > $max || isset($seen[$n])) {
+                continue;
+            }
+            $seen[$n] = true;
+            $picked[]  = $n;
+            if (count($picked) >= $limit) {
+                break;
+            }
+        }
+    }
+    return leNormalizePlayForGame($picked, $min, $max, $limit);
+}
+
+function leBuildCombinationProfileForGame(array $play, array $latestMain, int $numberMax, int $mainCount): array
+{
+    $ints = [];
+    foreach ($play as $v) {
+        $n = is_int($v) ? $v : leNumberToInt((string) $v);
+        if ($n > 0) {
+            $ints[] = $n;
+        }
+    }
+    sort($ints, SORT_NUMERIC);
+    $low = (int) round($numberMax * 0.5);
+    $odd = 0;
+    $lo  = 0;
+    foreach ($ints as $n) {
+        if ($n % 2 !== 0) {
+            $odd++;
+        }
+        if ($n <= $low) {
+            $lo++;
+        }
+    }
+    $sum         = array_sum($ints);
+    $spread      = !empty($ints) ? (max($ints) - min($ints)) : 0;
+    $consecutive = leConsecutiveCount($ints);
+    $latestLook  = [];
+    foreach ($latestMain as $v) {
+        $k = trim((string) $v);
+        if (strlen($k) === 1 && ctype_digit($k)) {
+            $k = '0' . $k;
+        }
+        $latestLook[$k] = true;
+    }
+    $repeated = 0;
+    foreach ($ints as $n) {
+        $k = ($n < 10) ? '0' . $n : (string) $n;
+        if (isset($latestLook[$k])) {
+            $repeated++;
+        }
+    }
+    $t1 = (int) round($numberMax * 0.34);
+    $t2 = (int) round($numberMax * 0.54);
+    $density = 'Wide spread';
+    if ($spread <= $t1) {
+        $density = 'High cluster density';
+    } elseif ($spread <= $t2) {
+        $density = 'Moderate cluster density';
+    }
+    return [
+        'odd_even'        => $odd . '/' . (count($ints) - $odd),
+        'low_high'        => $lo . '/' . (count($ints) - $lo),
+        'sum'             => $sum,
+        'spread'          => $spread,
+        'consecutive'     => $consecutive,
+        'repeated'        => $repeated,
+        'cluster_density' => $density,
+    ];
+}
+
+function leCrowdRiskProfileForGame(array $play, array $favoriteNumbers, int $numberMax): array
+{
+    $ints = [];
+    foreach ($play as $v) {
+        $n = is_int($v) ? $v : leNumberToInt((string) $v);
+        if ($n > 0) {
+            $ints[] = $n;
+        }
+    }
+    sort($ints, SORT_NUMERIC);
+    $favLook  = [];
+    foreach ($favoriteNumbers as $f) {
+        $favLook[(int) $f] = true;
+    }
+    $under31  = 0;
+    $favHits  = 0;
+    foreach ($ints as $n) {
+        if ($n <= 31) {
+            $under31++;
+        }
+        if (isset($favLook[$n])) {
+            $favHits++;
+        }
+    }
+    $spread      = !empty($ints) ? (max($ints) - min($ints)) : 0;
+    $consecutive = leConsecutiveCount($ints);
+    $visual      = leArithmeticPatternScore($ints) >= 2;
+    $score       = 0;
+    $reasons     = [];
+    if ($under31 >= 4) {
+        $score += 2;
+        $reasons[] = 'birthday-heavy composition';
+    } elseif ($under31 >= 3) {
+        $score += 1;
+        $reasons[] = 'leaning toward under-31 numbers';
+    }
+    if ($consecutive >= 2) {
+        $score += 2;
+        $reasons[] = 'sequence concentration';
+    } elseif ($consecutive === 1) {
+        $score += 1;
+        $reasons[] = 'minor sequence pattern';
+    }
+    if ($visual) {
+        $score += 1;
+        $reasons[] = 'obvious spacing pattern';
+    }
+    $t1 = (int) round($numberMax * 0.39);
+    $t2 = (int) round($numberMax * 0.54);
+    if ($spread <= $t1) {
+        $score += 2;
+        $reasons[] = 'tight clustering';
+    } elseif ($spread <= $t2) {
+        $score += 1;
+        $reasons[] = 'moderate clustering';
+    }
+    if ($favHits >= 2) {
+        $score += 1;
+        $reasons[] = 'cultural favorite overlap';
+    }
+    $label = 'Low crowd risk';
+    if ($score >= 5) {
+        $label = 'High crowd risk';
+    } elseif ($score >= 3) {
+        $label = 'Medium crowd risk';
+    }
+    $explanation = !empty($reasons)
+        ? 'Signals: ' . implode(', ', $reasons) . '.'
+        : 'Signals: broad spread and lower overlap with common crowd patterns.';
+    return ['score' => $score, 'label' => $label, 'explanation' => $explanation];
+}
+
 /**
  * --------------------------------------------------------------------------
  * User / session
@@ -601,6 +834,119 @@ if ($hasBonus) {
 
 /**
  * --------------------------------------------------------------------------
+ * Recommendation system (parameterized for current game matrix)
+ * --------------------------------------------------------------------------
+ */
+$favoriteNumbers = [3, 7, 8, 9, 11, 13, 17, 21, 22, 23, 24, 25, 27, 31];
+$fallbackAsc  = [];
+$fallbackDesc = [];
+for ($fi = 1; $fi <= $numberMax; $fi++) {
+    $fallbackAsc[] = $fi;
+}
+for ($fi = $numberMax; $fi >= 1; $fi--) {
+    $fallbackDesc[] = $fi;
+}
+
+$midThreshold    = (int) round($numberMax * 0.5);
+$highQuiet       = [];
+$highActive      = [];
+$midActive       = [];
+$lowActive       = [];
+$recentlySeen    = [];
+$nonFavoriteQuiet = [];
+
+foreach ($quietRecentKeys as $qKey) {
+    $qn = leNumberToInt((string) $qKey);
+    if ($qn > $midThreshold) {
+        $highQuiet[] = $qKey;
+    }
+    if (!in_array($qn, $favoriteNumbers, true)) {
+        $nonFavoriteQuiet[] = $qKey;
+    }
+}
+foreach ($topActiveRecentKeys as $aKey) {
+    $an = leNumberToInt((string) $aKey);
+    if ($an > $midThreshold) {
+        $highActive[] = $aKey;
+    }
+    if ($an >= (int) round($numberMax * 0.25) && $an <= $midThreshold) {
+        $midActive[] = $aKey;
+    }
+    if ($an <= $midThreshold) {
+        $lowActive[] = $aKey;
+    }
+}
+foreach ($recentMainLastSeen as $rsKey => $rsIdx) {
+    if ($rsIdx !== null && (int) $rsIdx <= 4) {
+        $recentlySeen[] = $rsKey;
+    }
+}
+
+$balancedPlay = leBuildPlayFromPoolsForGame(
+    [array_slice($topActiveRecentKeys, 0, 3), array_slice($quietRecentKeys, 0, 3), array_slice($recentlySeen, 0, 3), array_slice($top50, 0, 4), array_slice($top300, 0, 4)],
+    $fallbackAsc, 1, $numberMax, $mainCount
+);
+$valuePlay = leBuildPlayFromPoolsForGame(
+    [array_slice($topActiveRecentKeys, 0, 5), array_slice($top50, 0, 4), array_slice($repeatedNumbers, 0, 2), array_slice($quietRecentKeys, 0, 2)],
+    $fallbackAsc, 1, $numberMax, $mainCount
+);
+$coveragePlay = leBuildPlayFromPoolsForGame(
+    [array_slice($lowActive, 0, 2), array_slice($midActive, 0, 3), array_slice($highQuiet, 0, 2), array_slice($top300, 0, 3)],
+    $fallbackAsc, 1, $numberMax, $mainCount
+);
+$antiCrowdPlay = leBuildPlayFromPoolsForGame(
+    [array_slice($highQuiet, 0, 4), array_slice($highActive, 0, 3), array_slice($nonFavoriteQuiet, 0, 3), array_slice($top300, 0, 5)],
+    $fallbackDesc, 1, $numberMax, $mainCount
+);
+
+$balancedBonus  = '';
+$valueBonus     = '';
+$coverageBonus  = '';
+$antiCrowdBonus = '';
+if ($hasBonus) {
+    $topBonusKeys    = leTopKeysByValue($recentBonusCounts, 4, false);
+    $bottomBonusKeys = leTopKeysByValue($recentBonusCounts, 4, true);
+    $bqRecency = [];
+    foreach ($recentBonusLastSeen as $bk => $bi) {
+        $bqRecency[$bk] = ($bi === null) ? ($windowBonus + 1) : ((int) $bi + 1);
+    }
+    arsort($bqRecency, SORT_NUMERIC);
+    $quietBonusKeys = array_keys($bqRecency);
+    $balancedBonus  = lePadNum(!empty($topBonusKeys) ? (string) $topBonusKeys[0] : '01');
+    $valueBonus     = lePadNum(!empty($topBonusKeys) ? (string) ($topBonusKeys[1] ?? $topBonusKeys[0]) : '01');
+    $coverageBonus  = lePadNum(!empty($quietBonusKeys) ? (string) $quietBonusKeys[0] : '01');
+    $antiCrowdBonus = lePadNum(!empty($bottomBonusKeys) ? (string) $bottomBonusKeys[0] : '01');
+}
+
+$recommendations = [
+    ['id' => 'balanced',   'title' => 'Best Balanced Play',   'strategy' => 'Hybrid balance',          'numbers' => $balancedPlay,   'bonus' => $balancedBonus,   'rationale' => 'Mixes active, quiet, and recent signals to avoid over-committing to one behavior pattern.',             'risk_style' => 'Moderate risk profile',        'cta' => 'Use Balanced Play'],
+    ['id' => 'value',      'title' => 'Best Value Play',      'strategy' => 'Signal-weighted value',   'numbers' => $valuePlay,      'bonus' => $valueBonus,      'rationale' => 'Leans on stronger recent frequency while keeping one quieter anchor for structural balance.',    'risk_style' => 'Concentrated risk profile',    'cta' => 'Use Value Play'],
+    ['id' => 'coverage',   'title' => 'Best Coverage Play',   'strategy' => 'Range spread',            'numbers' => $coveragePlay,   'bonus' => $coverageBonus,   'rationale' => 'Prioritizes low-mid-high distribution and spacing for broader matrix coverage.',                 'risk_style' => 'Lower concentration risk',     'cta' => 'Use Coverage Play'],
+    ['id' => 'anti-crowd', 'title' => 'Anti-Crowd Play',      'strategy' => 'Split-risk aware',        'numbers' => $antiCrowdPlay,  'bonus' => $antiCrowdBonus,  'rationale' => 'Shifts away from birthday-heavy and common visual picks to reduce crowd overlap potential.',  'risk_style' => 'Higher variance profile',      'cta' => 'Use Anti-Crowd Play'],
+];
+$recommendationMap = [];
+foreach ($recommendations as $rPlay) {
+    $recommendationMap[$rPlay['id']] = $rPlay;
+}
+$crowdScores = [];
+foreach ($recommendations as $rPlay) {
+    $crowdScores[$rPlay['id']] = leCrowdRiskProfileForGame((array) $rPlay['numbers'], $favoriteNumbers, $numberMax);
+}
+$combinationProfiles = [
+    ['name' => 'Latest draw profile',      'numbers' => $latestMainBall,                              'profile' => leBuildCombinationProfileForGame($latestMainBall,                             $latestMainBall, $numberMax, $mainCount)],
+    ['name' => 'Value play profile',       'numbers' => (array) $recommendationMap['value']['numbers'],      'profile' => leBuildCombinationProfileForGame((array) $recommendationMap['value']['numbers'],      $latestMainBall, $numberMax, $mainCount)],
+    ['name' => 'Balanced play profile',    'numbers' => (array) $recommendationMap['balanced']['numbers'],   'profile' => leBuildCombinationProfileForGame((array) $recommendationMap['balanced']['numbers'],   $latestMainBall, $numberMax, $mainCount)],
+    ['name' => 'Anti-crowd play profile',  'numbers' => (array) $recommendationMap['anti-crowd']['numbers'], 'profile' => leBuildCombinationProfileForGame((array) $recommendationMap['anti-crowd']['numbers'], $latestMainBall, $numberMax, $mainCount)],
+];
+$bankrollPlans = [
+    ['budget' => 'Small budget',       'lines' => '2 lines per draw cycle',            'style' => 'Balanced play first, value play second',                   'priority' => 'Prioritize value signals, maintain one spread-oriented line',                              'anti_crowd' => 'Use anti-crowd play every third draw or when broad interest is high'],
+    ['budget' => 'Medium budget',      'lines' => '5 total lines',                     'style' => '2 balanced, 2 coverage, 1 anti-crowd',                     'priority' => 'Maintain spread and avoid over-concentration in one signal family',                       'anti_crowd' => 'Use anti-crowd line each draw for split-risk control'],
+    ['budget' => 'Larger budget',      'lines' => '10 total lines',                    'style' => '4 coverage, 3 balanced, 2 value, 1 anti-crowd',            'priority' => 'Prioritize matrix spread first, then rotate value concentration',                        'anti_crowd' => 'Anchor at least one anti-crowd structure every draw'],
+    ['budget' => 'Extended coverage',  'lines' => '20+ lines with rotation',           'style' => 'Coverage core with anti-crowd and value overlays',          'priority' => 'Use structured spread blocks and avoid duplicate pattern exposure',                      'anti_crowd' => 'Increase anti-crowd share when broad attention and crowd duplication risk rises'],
+];
+
+/**
+ * --------------------------------------------------------------------------
  * Structured data
  * --------------------------------------------------------------------------
  */
@@ -627,7 +973,7 @@ $structuredData = [
 ];
 $doc->addCustomTag('<script type="application/ld+json">' . htmlspecialchars(leSafeJson($structuredData), ENT_NOQUOTES, 'UTF-8') . '</script>');
 
-$heroSummary = 'Latest verified results, recent number behavior, and full historical context for ' . $lotteryFullName . '. Use the overview for fast orientation, then move into the detailed tables and advanced LottoExpert analysis tools.';
+$heroSummary = 'Latest verified results, decision-oriented play profiles, and full historical context for ' . $lotteryFullName . '. Start with best-play recommendations, then compare frequency, recency, crowd-risk, and planning tools.';
 $overviewNote = 'Frequency shows how often a number has appeared. Recency shows how many draws have passed since it was last seen. These are context signals for analysis, not guarantees.';
 ?>
 <style>
@@ -774,10 +1120,46 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
 .skai-utility-link{min-height:42px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--grad-slate);color:var(--deep-navy);font-size:13px;line-height:1.3;font-weight:850}
 .skai-method-note{padding:16px;border-radius:16px;border:1px solid var(--line);background:linear-gradient(180deg,#FAFBFF 0%,#FFFFFF 100%);font-size:14px;line-height:1.8;color:var(--text-soft)}
 .skai-method-note strong{color:var(--deep-navy)}
+.skai-simple-note{margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(28,102,255,.16);background:linear-gradient(180deg,rgba(28,102,255,.05) 0%,#FFFFFF 100%);color:var(--text-soft);font-size:13px;line-height:1.65}
+.skai-play-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.skai-play-card{border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 10px 24px rgba(10,26,51,.06);overflow:hidden}
+.skai-play-body{padding:14px 16px 16px}
+.skai-tag-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.skai-tag{display:inline-flex;align-items:center;min-height:28px;padding:6px 10px;border-radius:999px;font-size:11px;line-height:1.2;letter-spacing:.04em;text-transform:uppercase;font-weight:850;border:1px solid var(--line);color:var(--deep-navy);background:#F8FAFE}
+.skai-play-balls{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.skai-play-meta{margin:10px 0 0;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(180deg,#FFFFFF 0%,#FAFBFF 100%);font-size:13px;line-height:1.6;color:var(--text-soft)}
+.skai-play-meta strong{color:var(--deep-navy)}
+.skai-play-cta-row{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+.skai-button--ghost{min-height:44px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--deep-navy);font-size:13px;line-height:1.2;font-weight:850;cursor:pointer}
+.skai-strategy-status{margin-top:10px;min-height:20px;font-size:12px;line-height:1.5;color:var(--soft-slate)}
+.skai-profile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.skai-profile{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#FFFFFF 0%,#FAFBFF 100%);overflow:hidden}
+.skai-profile-head{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.3;font-weight:850;color:var(--deep-navy)}
+.skai-profile-body{padding:12px 14px 14px}
+.skai-metric{margin:0 0 6px;font-size:13px;line-height:1.55;color:var(--text-soft)}
+.skai-metric strong{color:var(--deep-navy)}
+.skai-crowd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.skai-crowd-item{border:1px solid var(--line);border-radius:14px;padding:12px 13px;background:#fff}
+.skai-crowd-level{margin:0;font-size:14px;line-height:1.25;font-weight:850;color:var(--deep-navy)}
+.skai-crowd-copy{margin:8px 0 0;font-size:13px;line-height:1.6;color:var(--text-soft)}
+.skai-bankroll-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.skai-bankroll-card{border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px}
+.skai-bankroll-title{margin:0 0 10px;font-size:16px;line-height:1.2;font-weight:900;color:var(--deep-navy)}
+.skai-bankroll-copy{margin:0 0 8px;font-size:13px;line-height:1.6;color:var(--text-soft)}
+.skai-guide-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+.skai-guide-panel{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#FFFFFF 0%,#FAFBFF 100%);padding:14px}
+.skai-guide-panel h3{margin:0 0 10px;font-size:16px;line-height:1.25;font-weight:900;color:var(--deep-navy)}
+.skai-guide-panel p,.skai-guide-panel li{font-size:14px;line-height:1.7;color:var(--text-soft)}
+.skai-guide-panel ul{margin:8px 0 0 18px;padding:0}
+.skai-faq-item{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.skai-faq-item:first-child{margin-top:0;padding-top:0;border-top:none}
+.skai-faq-q{margin:0;font-size:14px;line-height:1.45;font-weight:850;color:var(--deep-navy)}
+.skai-faq-a{margin:6px 0 0;font-size:13px;line-height:1.65;color:var(--text-soft)}
 @media (max-width:1080px){
   .skai-hero-top{grid-template-columns:96px minmax(0,1fr)}
   .skai-result-panel{grid-column:1/-1}
-  .skai-strip,.skai-tool-grid,.skai-overview-grid,.skai-two-col{grid-template-columns:1fr}
+  .skai-strip,.skai-play-grid,.skai-overview-grid,.skai-two-col{grid-template-columns:1fr}
+  .skai-profile-grid,.skai-crowd-grid,.skai-bankroll-grid,.skai-guide-grid,.skai-tool-grid{grid-template-columns:1fr}
   .skai-hero-actions,.skai-advanced-links,.skai-utility-grid{grid-template-columns:1fr}
 }
 @media (max-width:780px){
@@ -868,6 +1250,60 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
     </div>
   </section>
 
+  <section id="best-plays" class="skai-section" aria-labelledby="best-plays-title">
+    <div class="skai-section-head">
+      <div>
+        <h2 id="best-plays-title" class="skai-section-title">Today&rsquo;s best plays</h2>
+        <p class="skai-section-sub">Structured recommendation profiles generated from frequency, recency, quiet-stretch, repeat, and distribution signals. These are planning templates, not guarantees.</p>
+      </div>
+    </div>
+    <div class="skai-section-body">
+      <div class="skai-play-grid">
+        <?php foreach ($recommendations as $play) : ?>
+          <?php $risk = $crowdScores[$play['id']] ?? ['label' => 'Medium crowd risk', 'explanation' => '']; ?>
+          <article class="skai-play-card">
+            <div class="skai-card-head skai-card-head--horizon">
+              <?php echo htmlspecialchars((string) $play['title'], ENT_QUOTES, 'UTF-8'); ?>
+              <span class="skai-card-sub"><?php echo htmlspecialchars((string) $play['strategy'], ENT_QUOTES, 'UTF-8'); ?></span>
+            </div>
+            <div class="skai-play-body">
+              <div class="skai-tag-row">
+                <span class="skai-tag"><?php echo htmlspecialchars((string) $play['risk_style'], ENT_QUOTES, 'UTF-8'); ?></span>
+                <span class="skai-tag"><?php echo htmlspecialchars((string) $risk['label'], ENT_QUOTES, 'UTF-8'); ?></span>
+              </div>
+              <div class="skai-play-balls" aria-label="<?php echo htmlspecialchars((string) $play['title'], ENT_QUOTES, 'UTF-8'); ?> numbers">
+                <?php foreach ((array) $play['numbers'] as $pNum) : ?>
+                  <span class="skai-ball skai-ball--main"><?php echo htmlspecialchars(lePadNum((string) $pNum), ENT_QUOTES, 'UTF-8'); ?></span>
+                <?php endforeach; ?>
+                <?php if ($hasBonus && (string) $play['bonus'] !== '') : ?>
+                  <span class="skai-ball-gap" aria-hidden="true"></span>
+                  <span class="skai-ball skai-ball--bonus"><?php echo htmlspecialchars(lePadNum((string) $play['bonus']), ENT_QUOTES, 'UTF-8'); ?></span>
+                <?php endif; ?>
+              </div>
+              <div class="skai-play-meta">
+                <strong>Rationale:</strong> <?php echo htmlspecialchars((string) $play['rationale'], ENT_QUOTES, 'UTF-8'); ?>
+              </div>
+              <div class="skai-play-cta-row">
+                <button class="skai-button" type="button"><?php echo htmlspecialchars((string) $play['cta'], ENT_QUOTES, 'UTF-8'); ?></button>
+                <button
+                  class="skai-button--ghost js-save-strategy"
+                  type="button"
+                  data-strategy="<?php echo htmlspecialchars((string) $play['title'], ENT_QUOTES, 'UTF-8'); ?>"
+                  data-main="<?php echo htmlspecialchars(leCommaList((array) $play['numbers']), ENT_QUOTES, 'UTF-8'); ?>"
+                  data-bonus="<?php echo htmlspecialchars((string) $play['bonus'], ENT_QUOTES, 'UTF-8'); ?>"
+                >Save this strategy</button>
+              </div>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      </div>
+      <div class="skai-simple-note">
+        <strong>Simple explanation:</strong> Best plays combine multiple signals so you can act with structure instead of selecting lines randomly. A profile can still miss because each draw remains independent.
+      </div>
+      <div id="strategySaveStatus" class="skai-strategy-status" aria-live="polite"></div>
+    </div>
+  </section>
+
   <section class="skai-strip" aria-label="Key takeaways">
     <article class="skai-stat">
       <div class="skai-stat-head skai-stat-head--horizon">Most active now</div>
@@ -903,11 +1339,16 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
   </section>
 
   <nav class="skai-tabs" aria-label="Page navigation">
-    <a class="skai-tab skai-tab--active" href="#overview">Overview</a>
+    <a class="skai-tab skai-tab--active" href="#best-plays">Best Plays</a>
+    <a class="skai-tab" href="#overview">Overview</a>
+    <a class="skai-tab" href="#combination-profile">Combination Profile</a>
+    <a class="skai-tab" href="#anti-crowd">Anti-Crowd</a>
+    <a class="skai-tab" href="#bankroll-planner">Bankroll Planner</a>
     <a class="skai-tab" href="#recency-deep-dive">Recency</a>
     <a class="skai-tab" href="#frequency-deep-dive">Frequency</a>
     <a class="skai-tab" href="#tables">Tables</a>
     <a class="skai-tab" href="#tools">Advanced Tools</a>
+    <a class="skai-tab" href="#lottery-guide">Guide &amp; FAQ</a>
   </nav>
 
   <section id="overview" class="skai-section" aria-labelledby="overview-title">
@@ -959,6 +1400,85 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
         </article>
       </div>
       <div class="skai-note"><?php echo htmlspecialchars($overviewNote, ENT_QUOTES, 'UTF-8'); ?></div>
+    </div>
+  </section>
+
+  <section id="combination-profile" class="skai-section" aria-labelledby="combination-profile-title">
+    <div class="skai-section-head">
+      <div>
+        <h2 id="combination-profile-title" class="skai-section-title">Combination profile intelligence</h2>
+        <p class="skai-section-sub">Compare structural signatures across the latest draw and key recommendation profiles to understand shape, spread, and repeat behavior.</p>
+      </div>
+    </div>
+    <div class="skai-section-body">
+      <div class="skai-profile-grid">
+        <?php foreach ($combinationProfiles as $profileRow) : ?>
+          <article class="skai-profile">
+            <div class="skai-profile-head">
+              <?php echo htmlspecialchars((string) $profileRow['name'], ENT_QUOTES, 'UTF-8'); ?>
+              &mdash;
+              <?php echo htmlspecialchars(leCommaList((array) $profileRow['numbers']), ENT_QUOTES, 'UTF-8'); ?>
+            </div>
+            <div class="skai-profile-body">
+              <p class="skai-metric"><strong>Odd / Even:</strong> <?php echo htmlspecialchars((string) $profileRow['profile']['odd_even'], ENT_QUOTES, 'UTF-8'); ?></p>
+              <p class="skai-metric"><strong>Low / High:</strong> <?php echo htmlspecialchars((string) $profileRow['profile']['low_high'], ENT_QUOTES, 'UTF-8'); ?></p>
+              <p class="skai-metric"><strong>Sum:</strong> <?php echo (int) $profileRow['profile']['sum']; ?></p>
+              <p class="skai-metric"><strong>Spread:</strong> <?php echo (int) $profileRow['profile']['spread']; ?></p>
+              <p class="skai-metric"><strong>Consecutive count:</strong> <?php echo (int) $profileRow['profile']['consecutive']; ?></p>
+              <p class="skai-metric"><strong>Repeated vs latest draw:</strong> <?php echo (int) $profileRow['profile']['repeated']; ?></p>
+              <p class="skai-metric"><strong>Cluster density:</strong> <?php echo htmlspecialchars((string) $profileRow['profile']['cluster_density'], ENT_QUOTES, 'UTF-8'); ?></p>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      </div>
+      <div class="skai-simple-note">
+        <strong>Simple explanation:</strong> A profile is the shape of a line. Comparing shapes helps you avoid accidental duplication and over-concentration.
+      </div>
+    </div>
+  </section>
+
+  <section id="anti-crowd" class="skai-section" aria-labelledby="anti-crowd-title">
+    <div class="skai-section-head">
+      <div>
+        <h2 id="anti-crowd-title" class="skai-section-title">Anti-crowd intelligence</h2>
+        <p class="skai-section-sub">Crowd-likeness scoring estimates how likely a line resembles common number-selection patterns that may increase split-risk if the line wins.</p>
+      </div>
+    </div>
+    <div class="skai-section-body">
+      <div class="skai-crowd-grid">
+        <?php foreach ($recommendations as $play) : ?>
+          <?php $risk = $crowdScores[$play['id']] ?? ['label' => 'Medium crowd risk', 'explanation' => '']; ?>
+          <article class="skai-crowd-item">
+            <p class="skai-crowd-level"><?php echo htmlspecialchars((string) $play['title'], ENT_QUOTES, 'UTF-8'); ?>: <?php echo htmlspecialchars((string) $risk['label'], ENT_QUOTES, 'UTF-8'); ?></p>
+            <p class="skai-crowd-copy"><?php echo htmlspecialchars((string) $risk['explanation'], ENT_QUOTES, 'UTF-8'); ?></p>
+          </article>
+        <?php endforeach; ?>
+      </div>
+      <div class="skai-simple-note">
+        <strong>Simple explanation:</strong> Anti-crowd does not increase draw probability. It mainly helps reduce the chance of sharing prizes with many similar tickets.
+      </div>
+    </div>
+  </section>
+
+  <section id="bankroll-planner" class="skai-section" aria-labelledby="bankroll-planner-title">
+    <div class="skai-section-head">
+      <div>
+        <h2 id="bankroll-planner-title" class="skai-section-title">Bankroll planner</h2>
+        <p class="skai-section-sub">Choose a budget structure first, then align play style, spread depth, and anti-crowd usage to match your planning intent.</p>
+      </div>
+    </div>
+    <div class="skai-section-body">
+      <div class="skai-bankroll-grid">
+        <?php foreach ($bankrollPlans as $plan) : ?>
+          <article class="skai-bankroll-card">
+            <h3 class="skai-bankroll-title"><?php echo htmlspecialchars((string) $plan['budget'], ENT_QUOTES, 'UTF-8'); ?></h3>
+            <p class="skai-bankroll-copy"><strong>Recommended lines:</strong> <?php echo htmlspecialchars((string) $plan['lines'], ENT_QUOTES, 'UTF-8'); ?></p>
+            <p class="skai-bankroll-copy"><strong>Best play style:</strong> <?php echo htmlspecialchars((string) $plan['style'], ENT_QUOTES, 'UTF-8'); ?></p>
+            <p class="skai-bankroll-copy"><strong>Spread vs value:</strong> <?php echo htmlspecialchars((string) $plan['priority'], ENT_QUOTES, 'UTF-8'); ?></p>
+            <p class="skai-bankroll-copy"><strong>When to use anti-crowd:</strong> <?php echo htmlspecialchars((string) $plan['anti_crowd'], ENT_QUOTES, 'UTF-8'); ?></p>
+          </article>
+        <?php endforeach; ?>
+      </div>
     </div>
   </section>
 
@@ -1246,6 +1766,55 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
     </div>
     <div class="skai-section-body">
       <div class="skai-method-note"><strong>Interpretation guidance:</strong> Frequency shows how often a number has appeared. Recency shows how recently it appeared. Active and quiet numbers help organize historical behavior into a readable structure. These measures are descriptive signals that support careful review and deeper SKAI analysis.</div>
+    </div>
+  </section>
+
+  <section id="lottery-guide" class="skai-section" aria-labelledby="lottery-guide-title">
+    <div class="skai-section-head">
+      <div>
+        <h2 id="lottery-guide-title" class="skai-section-title">Lottery guide and FAQ</h2>
+        <p class="skai-section-sub">A reference layer for new and returning players: how the analysis tools work, what the frequency and recency signals mean, and how to use this page responsibly.</p>
+      </div>
+    </div>
+    <div class="skai-section-body">
+      <div class="skai-guide-grid">
+        <article class="skai-guide-panel">
+          <h3>How to use this page</h3>
+          <p><?php echo htmlspecialchars($lotteryFullName, ENT_QUOTES, 'UTF-8'); ?> results analysis is organized as a layered workflow. Start with the latest results at the top, review the best-play profiles for structured options, then move through frequency, recency, and the advanced tool links.</p>
+          <ul>
+            <li><strong>Frequency:</strong> Shows how often each number has appeared in the selected draw window. High frequency does not guarantee future appearances.</li>
+            <li><strong>Recency:</strong> Shows how long it has been since each number last appeared. A long gap means quiet, not due.</li>
+            <li><strong>Best plays:</strong> Profiles built from current signals. They are planning templates, not predictions.</li>
+            <li><strong>Anti-crowd:</strong> Estimates how closely a line resembles popular selection patterns. Does not affect draw probability.</li>
+          </ul>
+          <h3 style="margin-top:14px;">Related tools</h3>
+          <ul>
+            <li><a href="/picking-winning-numbers/artificial-intelligence/skai-lottery-prediction?gameId=<?php echo rawurlencode((string) $gId); ?>">SKAI Analysis</a></li>
+            <li><a href="/picking-winning-numbers/artificial-intelligence/ai-powered-predictions?game_id=<?php echo rawurlencode((string) $gId); ?>">AI Prediction Analysis</a></li>
+            <li><a href="/picking-winning-numbers/artificial-intelligence/skip-and-hit-analysis?game_id=<?php echo rawurlencode((string) $gId); ?>">Skip &amp; Hit Analysis</a></li>
+            <li><a href="/picking-winning-numbers/artificial-intelligence/markov-chain-monte-carlo-mcmc-analysis?gameId=<?php echo rawurlencode((string) $gId); ?>">MCMC Analysis</a></li>
+          </ul>
+        </article>
+        <article class="skai-guide-panel">
+          <h3>Frequently asked questions</h3>
+          <div class="skai-faq-item">
+            <p class="skai-faq-q">Are hot numbers more likely to be drawn?</p>
+            <p class="skai-faq-a">No. Lottery draws are independent events. Frequency data shows historical behavior, not a prediction of future draws.</p>
+          </div>
+          <div class="skai-faq-item">
+            <p class="skai-faq-q">Does a quiet number become &ldquo;due&rdquo;?</p>
+            <p class="skai-faq-a">No. A number that has not appeared for many draws has no higher probability than any other. The draw does not have memory.</p>
+          </div>
+          <div class="skai-faq-item">
+            <p class="skai-faq-q">What does anti-crowd actually do?</p>
+            <p class="skai-faq-a">Anti-crowd scoring helps you identify whether a line closely matches what many other players tend to pick. If a line wins, lower crowd overlap can mean fewer people sharing the prize &mdash; it does not make the line more likely to win.</p>
+          </div>
+          <div class="skai-faq-item">
+            <p class="skai-faq-q">How often is the data updated?</p>
+            <p class="skai-faq-a">Draw data is updated after each official draw result is confirmed in the system. Always verify results against official lottery sources.</p>
+          </div>
+        </article>
+      </div>
     </div>
   </section>
 </div>
@@ -1537,6 +2106,44 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
     }
   }
 
+  function bindStrategySaving() {
+    var status = document.getElementById('strategySaveStatus');
+    var buttons = document.querySelectorAll('.js-save-strategy');
+    var i;
+
+    function sanitizeText(value) {
+      return String(value || '').replace(/[^0-9,\sA-Za-z]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    var strategyStore = {
+      save: function (payload) {
+        var safeName = sanitizeText(payload.name);
+        return {
+          ok: false,
+          message: 'Saved as placeholder only: "' + safeName + '". Persistent account storage is not enabled in this page file.'
+        };
+      }
+    };
+
+    function setStatus(message) {
+      if (status) {
+        status.textContent = message;
+      }
+    }
+
+    for (i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener('click', function () {
+        var payload = {
+          name: sanitizeText(this.getAttribute('data-strategy') || 'Strategy'),
+          main: sanitizeText(this.getAttribute('data-main') || ''),
+          bonus: sanitizeText(this.getAttribute('data-bonus') || '')
+        };
+        var result = strategyStore.save(payload);
+        setStatus((result.ok ? '' : 'Notice: ') + result.message);
+      });
+    }
+  }
+
   function bindTabs() {
     var tabs = document.querySelectorAll('.skai-tab');
     var i;
@@ -1554,6 +2161,7 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
   function init() {
     bindTrackers();
     bindFilters();
+    bindStrategySaving();
     bindTabs();
     loadChartJsIfNeeded(renderCharts);
     window.addEventListener('resize', function () {
