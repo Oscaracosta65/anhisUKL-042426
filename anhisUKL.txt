@@ -983,7 +983,7 @@ $structuredData = [
         'description' => 'Lottery results analysis dataset showing draw history context, frequency counts, active numbers, quiet numbers, and recent recency behavior.',
     ],
 ];
-$doc->addCustomTag('<script type="application/ld+json">' . htmlspecialchars(leSafeJson($structuredData), ENT_NOQUOTES, 'UTF-8') . '</script>');
+$doc->addCustomTag('<script type="application/ld+json">' . json_encode($structuredData, JSON_UNESCAPED_UNICODE) . '</script>');
 
 $heroSummary = 'Latest verified results, decision-oriented play profiles, and full historical context for ' . $lotteryFullName . '. Start with best-play recommendations, then compare frequency, recency, crowd-risk, and planning tools.';
 $overviewNote = 'Frequency shows how often a number has appeared. Recency shows how many draws have passed since it was last seen. These are context signals for analysis, not guarantees.';
@@ -1167,6 +1167,7 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
 .skai-faq-item:first-child{margin-top:0;padding-top:0;border-top:none}
 .skai-faq-q{margin:0;font-size:14px;line-height:1.45;font-weight:850;color:var(--deep-navy)}
 .skai-faq-a{margin:6px 0 0;font-size:13px;line-height:1.65;color:var(--text-soft)}
+.skai-guide-panel h3:not(:first-child){margin-top:14px}
 @media (max-width:1080px){
   .skai-hero-top{grid-template-columns:96px minmax(0,1fr)}
   .skai-result-panel{grid-column:1/-1}
@@ -1193,7 +1194,7 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
   <section class="skai-hero" aria-label="Results intelligence header">
     <div class="skai-hero-inner">
       <div class="skai-hero-top">
-        <div class="skai-logo" aria-hidden="<?php echo $logo['exists'] ? 'false' : 'true'; ?>">
+        <div class="skai-logo" <?php if (!$logo['exists']) : ?>aria-hidden="true"<?php endif; ?>>
           <?php if ($logo['exists']) : ?>
             <img src="<?php echo htmlspecialchars((string) $logo['url'], ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($lotteryFullName . ' logo', ENT_QUOTES, 'UTF-8'); ?>" width="110" height="110" loading="lazy" decoding="async">
           <?php else : ?>
@@ -1265,7 +1266,7 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
   <section id="best-plays" class="skai-section" aria-labelledby="best-plays-title">
     <div class="skai-section-head">
       <div>
-        <h2 id="best-plays-title" class="skai-section-title">Today&rsquo;s best plays</h2>
+        <h2 id="best-plays-title" class="skai-section-title">Today's best plays</h2>
         <p class="skai-section-sub">Structured recommendation profiles generated from frequency, recency, quiet-stretch, repeat, and distribution signals. These are planning templates, not guarantees.</p>
       </div>
     </div>
@@ -1376,14 +1377,14 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
           <div class="skai-controls-left">
             <label for="nod">Main-number window</label>
             <select name="nod" id="nod" class="skai-select">
-              <?php foreach (range(10, 700, 5) as $opt) : ?>
+              <?php foreach ([10, 25, 50, 75, 100, 150, 200, 300, 400, 500, 700] as $opt) : ?>
                 <option value="<?php echo (int) $opt; ?>"<?php echo ((int) $opt === (int) $windowMain) ? ' selected="selected"' : ''; ?>><?php echo (int) $opt; ?></option>
               <?php endforeach; ?>
             </select>
             <?php if ($hasBonus) : ?>
               <label for="pnod"><?php echo htmlspecialchars($bonusLabel, ENT_QUOTES, 'UTF-8'); ?> window</label>
               <select name="pnod" id="pnod" class="skai-select">
-                <?php foreach (range(10, 700, 5) as $opt) : ?>
+                <?php foreach ([10, 25, 50, 75, 100, 150, 200, 300, 400, 500, 700] as $opt) : ?>
                   <option value="<?php echo (int) $opt; ?>"<?php echo ((int) $opt === (int) $windowBonus) ? ' selected="selected"' : ''; ?>><?php echo (int) $opt; ?></option>
                 <?php endforeach; ?>
               </select>
@@ -1427,8 +1428,7 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
         <?php foreach ($combinationProfiles as $profileRow) : ?>
           <article class="skai-profile">
             <div class="skai-profile-head">
-              <?php echo htmlspecialchars((string) $profileRow['name'], ENT_QUOTES, 'UTF-8'); ?>
-              &mdash;
+              <?php echo htmlspecialchars((string) $profileRow['name'], ENT_QUOTES, 'UTF-8'); ?>:
               <?php echo htmlspecialchars(leCommaList((array) $profileRow['numbers']), ENT_QUOTES, 'UTF-8'); ?>
             </div>
             <div class="skai-profile-body">
@@ -1611,10 +1611,10 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
             <table id="skai-main-table" class="skai-table" aria-label="Main numbers frequency table">
               <thead>
                 <tr>
-                  <th>Number</th>
-                  <th>Times Drawn</th>
-                  <th>Last Drawn</th>
-                  <th>Track</th>
+                  <th scope="col">Number</th>
+                  <th scope="col">Times Drawn</th>
+                  <th scope="col">Last Drawn</th>
+                  <th scope="col">Track</th>
                 </tr>
               </thead>
               <tbody>
@@ -1673,10 +1673,10 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
               <table id="skai-bonus-table" class="skai-table" aria-label="Bonus frequency table">
                 <thead>
                   <tr>
-                    <th>Number</th>
-                    <th>Times Drawn</th>
-                    <th>Last Drawn</th>
-                    <th>Track</th>
+                    <th scope="col">Number</th>
+                    <th scope="col">Times Drawn</th>
+                    <th scope="col">Last Drawn</th>
+                    <th scope="col">Track</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1721,7 +1721,7 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
           <article class="skai-card">
             <div class="skai-card-head skai-card-head--radiant">No bonus-ball table on this game<span class="skai-card-sub">This game uses main-number analysis only</span></div>
             <div class="skai-card-body">
-              <div class="skai-method-note"><strong>Game structure note:</strong> This game configuration does not use a separate bonus ball in the original target logic, so the bonus-frequency module is intentionally omitted.</div>
+              <div class="skai-method-note"><strong>Game structure:</strong> This game does not use a separate bonus ball, so the bonus-frequency table is not shown.</div>
             </div>
           </article>
         <?php endif; ?>
@@ -1799,7 +1799,7 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
             <li><strong>Best plays:</strong> Profiles built from current signals. They are planning templates, not predictions.</li>
             <li><strong>Anti-crowd:</strong> Estimates how closely a line resembles popular selection patterns. Does not affect draw probability.</li>
           </ul>
-          <h3 style="margin-top:14px;">Related tools</h3>
+          <h3>Related tools</h3>
           <ul>
             <li><a href="/picking-winning-numbers/artificial-intelligence/skai-lottery-prediction?gameId=<?php echo rawurlencode((string) $gId); ?>">SKAI Analysis</a></li>
             <li><a href="/picking-winning-numbers/artificial-intelligence/ai-powered-predictions?game_id=<?php echo rawurlencode((string) $gId); ?>">AI Prediction Analysis</a></li>
@@ -1814,12 +1814,12 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
             <p class="skai-faq-a">No. Lottery draws are independent events. Frequency data shows historical behavior, not a prediction of future draws.</p>
           </div>
           <div class="skai-faq-item">
-            <p class="skai-faq-q">Does a quiet number become &ldquo;due&rdquo;?</p>
+            <p class="skai-faq-q">Does a quiet number become "due"?</p>
             <p class="skai-faq-a">No. A number that has not appeared for many draws has no higher probability than any other. The draw does not have memory.</p>
           </div>
           <div class="skai-faq-item">
             <p class="skai-faq-q">What does anti-crowd actually do?</p>
-            <p class="skai-faq-a">Anti-crowd scoring helps you identify whether a line closely matches what many other players tend to pick. If a line wins, lower crowd overlap can mean fewer people sharing the prize &mdash; it does not make the line more likely to win.</p>
+            <p class="skai-faq-a">Anti-crowd scoring helps you identify whether a line closely matches what many other players tend to pick. If a line wins, lower crowd overlap can mean fewer people sharing the prize - it does not make the line more likely to win.</p>
           </div>
           <div class="skai-faq-item">
             <p class="skai-faq-q">How often is the data updated?</p>
@@ -2128,12 +2128,39 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
     }
 
     var strategyStore = {
+      key: 'le_strategies',
       save: function (payload) {
         var safeName = sanitizeText(payload.name);
-        return {
-          ok: false,
-          message: 'Saved as placeholder only: "' + safeName + '". Persistent account storage is not enabled in this page file.'
-        };
+        var safeMain = sanitizeText(payload.main);
+        var safeBonus = sanitizeText(payload.bonus);
+        var existing = [];
+        var stored;
+        var entry;
+        var i;
+        try {
+          stored = window.localStorage.getItem(this.key);
+          if (stored) {
+            existing = JSON.parse(stored) || [];
+            if (!Array.isArray(existing)) {
+              existing = [];
+            }
+          }
+        } catch (e) {
+          return { ok: false, message: 'Browser storage is not available on this device.' };
+        }
+        for (i = 0; i < existing.length; i++) {
+          if (existing[i] && existing[i].name === safeName) {
+            return { ok: true, message: '"' + safeName + '" is already in your saved strategies.' };
+          }
+        }
+        entry = { name: safeName, main: safeMain, bonus: safeBonus };
+        existing.push(entry);
+        try {
+          window.localStorage.setItem(this.key, JSON.stringify(existing));
+          return { ok: true, message: '"' + safeName + '" saved to your browser. Your strategies are available until browser data is cleared.' };
+        } catch (e) {
+          return { ok: false, message: 'Unable to save. Browser storage may be full or disabled.' };
+        }
       }
     };
 
@@ -2176,10 +2203,16 @@ $overviewNote = 'Frequency shows how often a number has appeared. Recency shows 
     bindStrategySaving();
     bindTabs();
     loadChartJsIfNeeded(renderCharts);
+    var resizeTimer = null;
     window.addEventListener('resize', function () {
-      if (chartRetryCount < maxChartRetries) {
-        window.setTimeout(renderCharts, 150);
+      if (resizeTimer) {
+        window.clearTimeout(resizeTimer);
       }
+      resizeTimer = window.setTimeout(function () {
+        resizeTimer = null;
+        chartRetryCount = 0;
+        renderCharts();
+      }, 300);
     });
   }
 
